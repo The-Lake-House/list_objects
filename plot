@@ -28,11 +28,7 @@ plot <- ggplot(stats, aes(i, mean)) +
     geom_ribbon(aes(y = mean, ymin = mean - (1.96 * sd), ymax = mean + (1.96 * sd)), alpha = 0.2) +
     geom_smooth(method = "lm") +
     scale_y_continuous(limits = c(0, NA)) +
-    labs(
-        x = "Number of Inserts",
-        y = "Mean Time [ms]",
-        title = "MinIO: ListObjectsV2 performance under load"
-    )
+    labs(x = "Number of Inserts", y = "Mean Time [ms]")
 
 ggsave("list_objects.pdf", plot = plot, width = 10)
 ggsave("list_objects.svg", plot = plot, width = 10)

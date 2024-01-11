@@ -1,0 +1,70 @@
+#!/usr/bin/env python
+
+import io
+import math
+import os
+import statistics
+import sys
+import time
+import timeit
+
+from minio import Minio
+from minio.error import S3Error
+from minio.deleteobjects import DeleteObject
+
+# Config
+NUM_INSERTS = 10000
+NUM_REPS = 30
+BUCKET_NAME = "minio-bench-list-objects"
+ENDPOINT = os.getenv("AWS_ENDPOINT_URL", "127.0.0.1:9000").replace("http://", "")
+ACCESSKEY = os.getenv("AWS_ACCESS_KEY_ID", "accesskey")
+SECRETKEY = os.getenv("AWS_SECRET_ACCESS_KEY", "secretkey")
+
+
+def bench(stmt, num_reps, unit="msec", out=sys.stdout):
+    t = timeit.repeat(stmt=stmt, timer=time.perf_counter_ns, number=1, repeat=num_reps, globals=globals())
+    print('\t'.join(str(time) for time in t), file=out, flush=True)
+
+
+def pad_rep(rep, num_reps):
+    return format(rep, "0" + str(math.ceil(math.log10(num_reps + 1))))
+
+
+def put_one(rep):
+    padded_rep = pad_rep(rep, NUM_INSERTS)
+    binary_rep = padded_rep.encode()
+    client.put_object(BUCKET_NAME, padded_rep, io.BytesIO(binary_rep), len(binary_rep))
+
+
+client = Minio(
+    ENDPOINT,
+    access_key=ACCESSKEY,
+    secret_key=SECRETKEY,
+    secure=False
+)
+
+# Setup
+if client.bucket_exists(BUCKET_NAME):
+    print("Bucket already exists")
+    sys.exit(1)
+else:
+    client.make_bucket(BUCKET_NAME)
+out = open("results", "a")
+out.seek(0, io.SEEK_SET)
+out.truncate()
+
+# Benchmark
+for rep in range(1, NUM_INSERTS + 1):
+    print(rep, "/", NUM_INSERTS)
+    put_one(rep)
+    bench(stmt="list(client.list_objects(BUCKET_NAME))", num_reps=NUM_REPS, out=out)
+
+# Cleanup
+delete_object_list = map(
+    lambda x: DeleteObject(x.object_name),
+    client.list_objects(BUCKET_NAME)
+)
+errors = client.remove_objects(BUCKET_NAME, delete_object_list)
+for error in errors:
+    print("error occurred when deleting object", error)
+client.remove_bucket(BUCKET_NAME)
